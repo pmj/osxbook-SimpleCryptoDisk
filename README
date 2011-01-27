@@ -1,0 +1,12 @@
+SimplyCryptoDisk Mac OS X driver example
+
+The original version by Amit Singh is from http://osxbook.com/book/src/ and is GPL licensed.
+
+It no longer compiles against the IOKit API in later Mac OS X 10.5 (Leopard) versions, or any version of Mac OS X 10.6 (Snow Leopard). I've made some minor updates to the driver code so it works for the latest API. The main API changes are the function signatures for read() and write(), which I've adapted. Tested to work well on Mac OS X 10.6.5.
+
+The book and this example were very useful to me in understanding how to write an IOKit-based driver, I hope this updated version helps anyone else trying to make sense of why the version from the book doesn't compile.
+
+Please note: this driver uses a very basic XOR "encryption" for demonstration purposes. Do not use it to encrypt sensitive data.
+
+Phil
+
