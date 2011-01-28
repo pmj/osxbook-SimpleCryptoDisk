@@ -76,12 +76,12 @@ com_osxbook_driver_SimpleCryptoDisk::start(IOService *provider)
     char name[32];
             
     // Set a name for this partition.
-    sprintf(name, "osxbook_HFS %ld", partitionID);
+    snprintf(name, sizeof(name), "osxbook_HFS %lu", (size_t)partitionID);
     newMedia->setName(name);
         
     // Set a location value (partition #) for this partition.
     char location[32];
-    sprintf(location, "%ld", partitionID);
+    snprintf(location, sizeof(location), "%lu", (size_t)partitionID);
     newMedia->setLocation(location);
         
     _filteredMedia = newMedia;
@@ -96,7 +96,7 @@ com_osxbook_driver_SimpleCryptoDisk::handleOpen(IOService   *client,
                                                 IOOptionBits options,
                                                 void        *argument)
 {
-    return getProvider()->open(this, options, (IOStorageAccess)argument);
+    return getProvider()->open(this, options, (IOStorageAccess)(size_t)argument);
 }
    
 bool
@@ -128,7 +128,8 @@ void
 com_osxbook_driver_SimpleCryptoDisk::read(IOService          *client,
                                           UInt64              byteStart,
                                           IOMemoryDescriptor *buffer,
-                                          IOStorageCompletion completion)
+                                          IOStorageAttributes *attributes,
+                                          IOStorageCompletion *completion)
 {
     SimpleCryptoDiskContext *context =
         (SimpleCryptoDiskContext *)IOMalloc(sizeof(SimpleCryptoDiskContext));
@@ -139,20 +140,22 @@ com_osxbook_driver_SimpleCryptoDisk::read(IOService          *client,
     context->size       = (vm_size_t)0;
    
     // Save original completion function and insert our own.
-    context->completion  = completion;
-    completion.action    = (IOStorageCompletionAction)&SCDReadWriteCompletion;
-    completion.target    = (void *)this;
-    completion.parameter = (void *)context;
+    context->completion  = *completion;
+    IOStorageCompletion comp;
+    comp.action    = (IOStorageCompletionAction)&SCDReadWriteCompletion;
+    comp.target    = (void *)this;
+    comp.parameter = (void *)context;
         
     // Hand over to the provider.
-    return getProvider()->read(this, byteStart, buffer, completion);
+    getProvider()->read(this, byteStart, buffer, attributes, &comp);
 }
    
 void
 com_osxbook_driver_SimpleCryptoDisk::write(IOService          *client,
                                            UInt64              byteStart,
                                            IOMemoryDescriptor *buffer,
-                                           IOStorageCompletion completion)
+                                           IOStorageAttributes *attributes,
+                                           IOStorageCompletion *completion)
 {
     // The buffer passed to this function would have been created with a
     // direction of kIODirectionOut. We need a new buffer that is created
@@ -175,7 +178,7 @@ com_osxbook_driver_SimpleCryptoDisk::write(IOService          *client,
    
     // We use this descriptor as the buffer argument in the provider's write().
     IOMemoryDescriptor *bufferRO =
-        IOMemoryDescriptor::withSubRange(bufferWO, 0, length, kIODirectionOut);
+        IOMemoryDescriptor::withAddress(memory, length, kIODirectionOut);
    
     SimpleCryptoDiskContext *context =
         (SimpleCryptoDiskContext *)IOMalloc(sizeof(SimpleCryptoDiskContext));
@@ -184,18 +187,19 @@ com_osxbook_driver_SimpleCryptoDisk::write(IOService          *client,
     context->bufferWO    = bufferWO;
     context->memory      = memory;
     context->size        = (vm_size_t)length;
-   
+
     // Save the original completion function and insert our own.
-    context->completion  = completion;
-    completion.action    = (IOStorageCompletionAction)&SCDReadWriteCompletion;
-    completion.target    = (void *)this;
-    completion.parameter = (void *)context;
+    context->completion  = *completion;
+    IOStorageCompletion comp;
+    comp.action    = (IOStorageCompletionAction)&SCDReadWriteCompletion;
+    comp.target    = (void *)this;
+    comp.parameter = (void *)context;
     
     // Fix buffer contents (apply simple "encryption").
     fixBufferUserWrite(buffer, bufferWO);
    
     // Hand over to the provider.
-    return getProvider()->write(this, byteStart, bufferRO, completion);
+    getProvider()->write(this, byteStart, bufferRO, attributes, &comp);
 }
    
 static void
@@ -262,7 +266,7 @@ SCDReadWriteCompletion(void    *target,
                        UInt64   actualByteCount)
 {
     SimpleCryptoDiskContext *context = (SimpleCryptoDiskContext *)parameter;
-   
+    
     if (context->bufferWO == NULL) { // this was a read
    
         // Fix buffer contents (apply simple "decryption").
@@ -278,12 +282,10 @@ SCDReadWriteCompletion(void    *target,
     }
     
     // Retrieve the original completion routine.
-    IOStorageCompletion completion = context->completion;
+    IOStorageCompletion* completion = &context->completion;
    
     IOFree(context, sizeof(SimpleCryptoDiskContext));
    
     // Run the original completion routine, if any.
-    if (completion.action)
-        (*completion.action)(completion.target, completion.parameter, status,
-                             actualByteCount);
+    IOStorage::complete(completion, status, actualByteCount);
 }

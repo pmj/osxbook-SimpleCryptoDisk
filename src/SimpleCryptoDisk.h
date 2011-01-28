@@ -26,12 +26,14 @@ public:
         virtual void read(IOService          *client,
                           UInt64              byteStart,
                           IOMemoryDescriptor *buffer,
-                          IOStorageCompletion completion);
+                          IOStorageAttributes *attributes,
+                          IOStorageCompletion *completion);
    
         virtual void write(IOService          *client,
                            UInt64              byteStart,
                            IOMemoryDescriptor *buffer,
-                           IOStorageCompletion completion);
+													 IOStorageAttributes *attributes,
+                           IOStorageCompletion *completion);
    
         virtual IOReturn synchronizeCache(IOService *client);
         virtual IOMedia *getProvider() const;
